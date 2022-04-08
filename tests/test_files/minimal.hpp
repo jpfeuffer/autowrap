@@ -3,6 +3,13 @@
 
 typedef int Int;
 
+struct S {
+    int i = 2;
+    bool b = true;
+    double d = 1.0;
+    S() = default;
+};
+
 enum ABCorD {
         A, B=2, C, D
 };

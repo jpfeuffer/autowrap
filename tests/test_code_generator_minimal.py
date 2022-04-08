@@ -91,6 +91,9 @@ def test_minimal():
     os.remove(target)
     assert wrapped.__name__ == "wrapped"
 
+    struct = wrapped.S()
+    assert struct.i == 2
+
     minimal = wrapped.Minimal()
 
     assert len(minimal.compute.__doc__) == 297

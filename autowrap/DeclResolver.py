@@ -277,6 +277,30 @@ def resolve_decls_from_string(pxd_in_a_string):
     return _resolve_decls(PXDParser.parse_str(pxd_in_a_string))
 
 
+def _resolve_struct_decls(class_decl, typedef_mapping, i_mapping):
+        logger.info("resolve C struct decl %s" % class_decl.name)
+
+        r_attributes = []
+        for adcl in class_decl.attributes:
+            r_attributes.append(_resolve_attribute(adcl, i_mapping, typedef_mapping))
+
+        cinst_name = class_decl.name
+        r_methods = []
+        for (mname, mdcls) in class_decl.methods.items():
+            for mdcl in mdcls:
+                ignore = mdcl.annotations.get("wrap-ignore", False)
+                if ignore:
+                    continue
+                if mdcl.name == class_decl.name:
+                    r_method = _resolve_constructor(cinst_name, mdcl, i_mapping, typedef_mapping)
+                else:
+                    r_method = _resolve_method(mdcl, i_mapping, typedef_mapping)
+                r_methods.append(r_method)
+        r_class = ResolvedClass(cinst_name, r_methods, r_attributes,
+                                class_decl, i_mapping, typedef_mapping)
+        return r_class
+
+
 def _resolve_decls(decls):
     """
     input:
@@ -299,6 +323,7 @@ def _resolve_decls(decls):
     function_decls = filter_out(PXDParser.CppMethodOrFunctionDecl)
     enum_decls = filter_out(PXDParser.EnumDecl)
     class_decls = filter_out(PXDParser.CppClassDecl)
+    struct_decls = filter_out(PXDParser.CStructDecl)
 
     class_decls = _resolve_all_inheritances(class_decls)
 
@@ -331,8 +356,9 @@ def _resolve_decls(decls):
     typedefs = [ResolvedTypeDef(t) for t in typedef_decls]
 
     classes = _resolve_class_decls(class_decls, typedef_mapping, instance_mapping)
+    structs = _resolve_struct_decls(struct_decls, typedef_mapping, instance_mapping)
 
-    return classes + enums + functions + typedefs, instance_mapping
+    return classes + structs + enums + functions + typedefs, instance_mapping
 
 
 def _resolve_all_inheritances(class_decls):

@@ -318,6 +318,81 @@ class EnumDecl(BaseDecl):
         return []
 
 
+class CStructDecl(BaseDecl):
+    def __init__(
+        self, name, attributes, annotations, pxd_path
+    ):
+        super(CStructDecl, self).__init__(name, annotations, pxd_path)
+        self.attributes = attributes
+
+    @classmethod
+    def parseTree(cls, node, lines, pxd_path):
+        if node.kind == "union":
+            logger.warning("Unions not supported yet. Skipping autowrap parsing.")
+
+        name = node.name
+        class_annotations = parse_class_annotations(node, lines)
+        attributes = []
+        for att in node.attributes:
+            decl = None
+            if isinstance(att, CVarDefNode):  # attribute or member function
+                decl = MethodOrAttributeDecl.parseTree(att, lines, pxd_path)
+            elif isinstance(att, CEnumDefNode):
+                logger.warning("Nested enums currently not supported by autowrap. Skipping its wrap."
+                               " Please add them under a new cdef extern section with class namespace. E.g.: \n"
+                               "cdef extern from 'foo.hpp' namespace 'Foo': \n"
+                               "    cpdef enum class MyEnum 'Foo::MyEnum': \n"
+                               "      # wrap-attach: Foo \n"
+                               "      A,B,C")
+                # TODO we might be able to support it with the following
+                #decl = EnumDecl.parseTree(att, lines, pxd_path)
+            elif isinstance(att, CClassDefNode):
+                logger.warning("Nested classes are currently not supported by autowrap. Skipping its wrap."
+                                " Try to add them under a new cdef extern section with class namespace. E.g.: \n"
+                                "cdef extern from 'foo.hpp' namespace 'Foo': \n"
+                                "    cpdef cppclass MyClass 'Foo::MyClass': \n"
+                                "      ...")
+            if decl is not None:
+                if isinstance(decl, CppMethodOrFunctionDecl):
+                    logger.warning("No methods allowed in a C-type struct.")
+                elif isinstance(decl, CppAttributeDecl):
+                    attributes.append(decl)
+                elif isinstance(decl, EnumDecl):
+                    # Should not happen since we currently forbid it in the logic above
+                    #attributes.append(decl)
+                    pass
+
+        return cls(name, attributes, class_annotations, pxd_path)
+
+    def __str__(self):
+        rv = ["cppstruct %s: " % (self.name,)]
+        for meth_list in self.methods.values():
+            rv += ["     " + str(method) for method in meth_list]
+        return "\n".join(rv)
+
+    def get_transformed_methods(self, mapping):
+        result = defaultdict(list)
+        for mdcl in self.get_method_decls():
+            result[mdcl.name].append(mdcl.transformed(mapping))
+        return result
+
+    def get_method_decls(self):
+        for name, method_decls in self.methods.items():
+            for method_decl in method_decls:
+                yield method_decl
+
+    def has_method(self, other_decl):
+        with_same_name = self.methods.get(other_decl.name)
+        if with_same_name is None:
+            return False
+        return any(decl.matches(other_decl) for decl in with_same_name)
+
+    def attach_base_methods(self, dd):
+        for name, decls in dd.items():
+            for decl in decls:
+                if not self.has_method(decl):
+                    self.methods.setdefault(decl.name, []).append(decl)
+
 class CppClassDecl(BaseDecl):
     def __init__(
         self, name, template_parameters, methods, attributes, annotations, pxd_path
@@ -577,6 +652,7 @@ def parse_pxd_file(path, warn_level=1):
         CppClassNode: CppClassDecl.parseTree,
         CTypeDefNode: CTypeDefDecl.parseTree,
         CVarDefNode: MethodOrAttributeDecl.parseTree,
+        #CStructOrUnionDefNode: CStructDecl.parseTree,
         CImportStatNode: cimport,
     }
 
