@@ -1112,13 +1112,17 @@ class CodeGenerator(object):
             codes.append(code)
             return codes, typestubs
 
-    def _create_fun_decl_and_input_conversion(self, code, py_name, method, is_free_fun=False):
+    def _create_fun_decl_and_input_conversion(self, code, py_name, method, is_free_fun=False, display_name=None):
         """Creates the function declarations and the input conversion to C++
         and the output conversion back to Python.
 
         The input conversion is directly added to the "code" object while the
         conversion back to Python is returned as "cleanups".
         """
+        # Use display_name for docstrings if provided, otherwise use py_name
+        if display_name is None:
+            display_name = py_name
+        
         args = augment_arg_names(method)
 
         # Step 0: collect conversion data for input args and call
@@ -1159,7 +1163,7 @@ class CodeGenerator(object):
             return_type = ""
 
         # Prepare docstring
-        docstring = f"{py_name}({py_typing_signature}) {return_type}"
+        docstring = f"{display_name}({py_typing_signature}) {return_type}"
         stubdocstring = "Cython signature: %s" % method
 
         extra_doc = method.cpp_decl.annotations.get("wrap-doc", None)
@@ -1462,7 +1466,7 @@ class CodeGenerator(object):
             cleanups,
             in_types,
             stubs,
-        ) = self._create_fun_decl_and_input_conversion(fun_code, name, decl, is_free_fun=True)
+        ) = self._create_fun_decl_and_input_conversion(fun_code, name, decl, is_free_fun=True, display_name=decl.name)
 
         call_args_str = ", ".join(call_args)
         mangled_name = "_" + orig_cpp_name + "_" + decl.pxd_import_path
